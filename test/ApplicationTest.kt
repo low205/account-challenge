@@ -1,15 +1,14 @@
 package de.accountio
 
-import io.ktor.application.*
-import io.ktor.response.*
-import io.ktor.request.*
-import io.ktor.routing.*
-import io.ktor.http.*
-import io.ktor.features.*
-import com.fasterxml.jackson.databind.*
-import io.ktor.jackson.*
-import kotlin.test.*
-import io.ktor.server.testing.*
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.testing.handleRequest
+import io.ktor.server.testing.withTestApplication
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class ApplicationTest {
     @Test
@@ -17,8 +16,11 @@ class ApplicationTest {
         withTestApplication({ module(testing = true) }) {
             handleRequest(HttpMethod.Get, "/").apply {
                 assertEquals(HttpStatusCode.OK, response.status())
-
-                assertEquals("HELLO WORLD!", response.content)
+                val content = assertNotNull(response.content)
+                assertEquals(
+                    mapOf("name" to "Accounting application", "version" to "0.0.1"),
+                    jacksonObjectMapper().readValue(content)
+                )
             }
         }
     }

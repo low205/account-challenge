@@ -1,13 +1,18 @@
 package de.accountio
 
-import io.ktor.application.*
-import io.ktor.response.*
-import io.ktor.request.*
-import io.ktor.routing.*
-import io.ktor.http.*
-import io.ktor.features.*
-import com.fasterxml.jackson.databind.*
-import io.ktor.jackson.*
+import com.fasterxml.jackson.databind.SerializationFeature
+import de.accountio.de.accountio.service.accountServiceActor
+import de.accountio.de.accountio.web.accountResource
+import io.ktor.application.Application
+import io.ktor.application.call
+import io.ktor.application.install
+import io.ktor.features.CallLogging
+import io.ktor.features.ContentNegotiation
+import io.ktor.features.DefaultHeaders
+import io.ktor.jackson.jackson
+import io.ktor.response.respond
+import io.ktor.routing.get
+import io.ktor.routing.routing
 
 fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 
@@ -21,9 +26,9 @@ fun Application.module(testing: Boolean = false) {
             enable(SerializationFeature.INDENT_OUTPUT)
         }
     }
-
+    val accountService = accountServiceActor()
     routing {
-
+        accountResource(accountService)
         get("/") {
             call.respond(mapOf("name" to "Accounting application", "version" to "0.0.1"))
         }
