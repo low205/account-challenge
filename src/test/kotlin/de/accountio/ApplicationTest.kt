@@ -1,6 +1,5 @@
 package de.accountio
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -19,7 +18,21 @@ class ApplicationTest {
                 val content = assertNotNull(response.content)
                 assertEquals(
                     mapOf("name" to "Accounting application", "version" to "0.0.1"),
-                    jacksonObjectMapper().readValue(content)
+                    mapper.readValue(content)
+                )
+            }
+        }
+    }
+
+    @Test
+    fun defaultPathShouldReturnNotFound() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Get, "/Some/Random/Path").apply {
+                assertEquals(HttpStatusCode.NotFound, response.status())
+                val content = assertNotNull(response.content)
+                assertEquals(
+                    mapOf("path" to "/Some/Random/Path"),
+                    mapper.readValue(content)
                 )
             }
         }

@@ -1,6 +1,6 @@
-package de.accountio.de.accountio.domain
+package de.accountio.domain
 
-import de.accountio.de.accountio.store.StorableEntity
+import de.accountio.store.StorableEntity
 import java.math.BigDecimal
 import java.time.LocalDateTime
 

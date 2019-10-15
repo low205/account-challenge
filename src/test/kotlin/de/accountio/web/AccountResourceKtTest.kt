@@ -1,8 +1,8 @@
 package de.accountio.web
 
 import com.fasterxml.jackson.module.kotlin.readValue
-import de.accountio.de.accountio.domain.Account
-import de.accountio.de.accountio.domain.AccountStatuses
+import de.accountio.domain.Account
+import de.accountio.domain.AccountStatuses
 import de.accountio.mapper
 import de.accountio.module
 import io.ktor.http.ContentType
@@ -27,6 +27,29 @@ class AccountResourceKtTest {
                 assertTrue(account.id > 0)
                 assertTrue(account.number.isNotBlank())
                 assertEquals(account.status, AccountStatuses.OPEN)
+            }
+        }
+    }
+
+    @Test
+    fun shouldBadRequestWhenFindingAccountByInvalidId() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Get, "/accounts/invalidId").apply {
+                assertEquals(HttpStatusCode.BadRequest, response.status())
+                assertTrue(response.contentType().match(ContentType.Application.Json))
+                val response = mapper.readValue<Map<String, String>>(assertNotNull(response.content))
+                assertEquals(response["error"], "Must provide id")
+            }
+        }
+    }
+
+    @Test
+    fun shouldNotFoundWhenAccountNotFound() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Get, "/accounts/10").apply {
+                assertEquals(HttpStatusCode.NotFound, response.status())
+                val response = mapper.readValue<Map<String, Int>>(assertNotNull(response.content))
+                assertEquals(response["id"], 10)
             }
         }
     }
