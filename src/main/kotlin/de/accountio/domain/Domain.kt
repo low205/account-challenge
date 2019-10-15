@@ -7,7 +7,8 @@ import java.time.LocalDateTime
 data class Account(
     override val id: Long,
     val number: String,
-    val status: AccountStatuses = AccountStatuses.OPEN
+    val status: AccountStatuses = AccountStatuses.OPEN,
+    val transactions: List<Transaction> = emptyList()
 ) : StorableEntity
 
 enum class AccountStatuses {

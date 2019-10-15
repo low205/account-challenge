@@ -9,8 +9,9 @@ interface StorableEntity {
 open class Store<T : StorableEntity> internal constructor() {
     private val entities = mutableMapOf<Long, T>()
     fun findById(id: Long) = entities[id]
-    fun save(entity: T) {
+    fun save(entity: T): T {
         entities[entity.id] = entity
+        return entity
     }
 
     fun getAll() = entities.values.toList()

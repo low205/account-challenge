@@ -44,12 +44,57 @@ class AccountResourceKtTest {
     }
 
     @Test
-    fun shouldNotFoundWhenAccountNotFound() {
+    fun shouldNotFoundWhenAccountNotFoundOnFindById() {
         withTestApplication({ module(testing = true) }) {
             handleRequest(HttpMethod.Get, "/accounts/10").apply {
                 assertEquals(HttpStatusCode.NotFound, response.status())
                 val response = mapper.readValue<Map<String, Int>>(assertNotNull(response.content))
                 assertEquals(response["id"], 10)
+            }
+        }
+    }
+
+    @Test
+    fun shouldNotFoundWhenAccountNotFoundOnDelete() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Delete, "/accounts/10").apply {
+                assertEquals(HttpStatusCode.NotFound, response.status())
+                val response = mapper.readValue<Map<String, Int>>(assertNotNull(response.content))
+                assertEquals(response["id"], 10)
+            }
+        }
+    }
+
+    @Test
+    fun shouldBadRequestWhenDeleteAccountByInvalidId() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Delete, "/accounts/invalidId").apply {
+                assertEquals(HttpStatusCode.BadRequest, response.status())
+                assertTrue(response.contentType().match(ContentType.Application.Json))
+                val response = mapper.readValue<Map<String, String>>(assertNotNull(response.content))
+                assertEquals(response["error"], "Must provide id")
+            }
+        }
+    }
+
+    @Test
+    fun shouldReturnClosedAccountOnDelete() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Post, "/accounts").apply {
+                assertEquals(HttpStatusCode.Created, response.status())
+                assertTrue(response.contentType().match(ContentType.Application.Json))
+                val account = mapper.readValue<Account>(assertNotNull(response.content))
+                assertTrue(account.id > 0)
+                assertTrue(account.number.isNotBlank())
+                assertEquals(AccountStatuses.OPEN, account.status)
+
+                handleRequest(HttpMethod.Delete, "/accounts/${account.id}").apply {
+                    assertEquals(HttpStatusCode.Accepted, response.status())
+                    val deleted = mapper.readValue<Account>(assertNotNull(response.content))
+                    assertEquals(AccountStatuses.CLOSED, deleted.status)
+                    assertEquals(account.id, deleted.id)
+                    assertEquals(account.number, deleted.number)
+                }
             }
         }
     }

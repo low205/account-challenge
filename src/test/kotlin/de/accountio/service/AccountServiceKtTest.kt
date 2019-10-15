@@ -48,4 +48,19 @@ internal class AccountServiceTest {
         assertEquals(account, accountFound)
         accountService.close()
     }
+
+    @Test
+    fun shouldCloseAccount() = runBlockingTest {
+        val accountService = accountServiceActor()
+        val account = await<Account> {
+            accountService.send(AccountServiceCommand.CreateNewAccount(it))
+        }
+        val accountClosed = await<Account> {
+            accountService.send(AccountServiceCommand.CloseAccount(account.id, it))
+        }
+        assertEquals(account.id, accountClosed.id)
+        assertEquals(account.number, accountClosed.number)
+        assertEquals(AccountStatuses.CLOSED, accountClosed.status)
+        accountService.close()
+    }
 }
