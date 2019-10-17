@@ -1,6 +1,7 @@
 package de.accountio
 
 import com.fasterxml.jackson.module.kotlin.readValue
+import de.accountio.jackson.JsonMapper.mapper
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.testing.handleRequest
@@ -12,7 +13,7 @@ import kotlin.test.assertNotNull
 class ApplicationTest {
     @Test
     fun testRoot() {
-        withTestApplication({ module(testing = true) }) {
+        withTestApplication({ module() }) {
             handleRequest(HttpMethod.Get, "/").apply {
                 assertEquals(HttpStatusCode.OK, response.status())
                 val content = assertNotNull(response.content)
@@ -26,7 +27,7 @@ class ApplicationTest {
 
     @Test
     fun defaultPathShouldReturnNotFound() {
-        withTestApplication({ module(testing = true) }) {
+        withTestApplication({ module() }) {
             handleRequest(HttpMethod.Get, "/Some/Random/Path").apply {
                 assertEquals(HttpStatusCode.NotFound, response.status())
                 val content = assertNotNull(response.content)
@@ -34,6 +35,17 @@ class ApplicationTest {
                     mapOf("path" to "/Some/Random/Path"),
                     mapper.readValue(content)
                 )
+            }
+        }
+    }
+
+    @Test
+    fun randomErrorShouldReturnServerError() {
+        withTestApplication({ module(testing = true) }) {
+            handleRequest(HttpMethod.Get, "/throw").apply {
+                assertEquals(HttpStatusCode.InternalServerError, response.status())
+                val content = assertNotNull(response.content)
+                assertEquals(mapOf("error" to "throw random error"), mapper.readValue(content))
             }
         }
     }

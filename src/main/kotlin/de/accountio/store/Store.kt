@@ -17,7 +17,6 @@ open class Store<T : StorableEntity> internal constructor() {
     fun getAll() = entities.values.toList()
     private val sequence: AtomicLong = AtomicLong(0)
     fun nextId() = sequence.incrementAndGet()
-    fun delete(id: Long) = entities.remove(id)
 }
 
 class EntityNotFoundException(val id: Long) : RuntimeException()
