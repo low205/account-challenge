@@ -13,6 +13,8 @@ data class Account(
     companion object {
         val VALID_FOR_TRANSFER = setOf(AccountStatuses.OPEN)
     }
+
+    fun validForTransfer(): Boolean = status in VALID_FOR_TRANSFER
 }
 
 enum class AccountStatuses {
@@ -31,7 +33,7 @@ enum class TransactionType {
     abstract fun amount(amount: BigDecimal): BigDecimal
 }
 
-class Transaction(
+data class Transaction(
     override val id: Long,
     val date: LocalDateTime,
     val type: TransactionType,

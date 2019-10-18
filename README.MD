@@ -29,3 +29,7 @@ Main reasons to be:
 ### Concurrency considerations
 
 Using Coroutines, Flows and Channels should allow us to use structured concurrency and avoid using unnecessary locks and synchronisation.
+
+### Deployemnt
+
+Application should be packed as a docker image. 

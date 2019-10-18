@@ -17,3 +17,12 @@ inline fun <T> Iterable<T>.sumByBigDecimal(selector: (T) -> BigDecimal): BigDeci
     }
     return sum
 }
+
+inline fun <R> CompletableDeferred<R>.use(block: (CompletableDeferred<R>) -> R) {
+    try {
+        val result = block(this)
+        this.complete(result)
+    } catch (t: Throwable) {
+        this.completeExceptionally(t)
+    }
+}

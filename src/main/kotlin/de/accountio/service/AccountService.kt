@@ -3,11 +3,9 @@ package de.accountio.service
 import de.accountio.domain.Account
 import de.accountio.domain.AccountStatuses
 import de.accountio.domain.Transaction
-import de.accountio.domain.TransactionType
-import de.accountio.service.AccountServiceCommand.*
-import de.accountio.store.EntityNotFoundException
-import de.accountio.store.Store
-import de.accountio.sumByBigDecimal
+import de.accountio.pagination.Paginator
+import de.accountio.store.AccountStorage
+import de.accountio.use
 import de.accountio.web.TransferRequest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -15,122 +13,86 @@ import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.channels.actor
 import java.math.BigDecimal
 import java.math.BigDecimal.ZERO
-import java.time.LocalDateTime
-import java.util.concurrent.atomic.AtomicLong
 
 sealed class AccountServiceCommand {
-    class CreateNewAccount(val initialAmount: BigDecimal = ZERO, val result: CompletableDeferred<Account>) :
-        AccountServiceCommand()
-
-    class FindAccountById(val id: Long, val result: CompletableDeferred<Account>) : AccountServiceCommand()
-    class CloseAccount(val id: Long, val result: CompletableDeferred<Account>) : AccountServiceCommand()
-    class TransferAmount(
-        val sourceAccount: Long,
-        val transfer: TransferRequest,
-        val result: CompletableDeferred<Pair<Transaction, Transaction>>
-    ) : AccountServiceCommand()
-
-    class GetAccountBalance(val id: Long, val result: CompletableDeferred<BigDecimal>) : AccountServiceCommand()
+    abstract operator fun invoke(store: AccountStorage)
 }
 
-private object AccountStorage : Store<Account>() {
-    private val transactionsSequence: AtomicLong = AtomicLong(0)
-
-    private val payInAccount = Account(nextId(), "initial-pay-in-account").also {
-        save(it)
-    }
-
-    fun createNewAccount(initialAmount: BigDecimal): Account {
-        val id = nextId()
-        val newAccount = Account(id, "businessnumber$id")
-        save(newAccount)
-        if (initialAmount > ZERO) {
-            transfer(payInAccount, newAccount, initialAmount)
-        }
-        return newAccount
-    }
-
-    fun transfer(from: Account, to: Account, amount: BigDecimal): Pair<Transaction, Transaction> {
-        val currentTime = LocalDateTime.now()
-        val depositTransaction = Transaction(
-            transactionsSequence.incrementAndGet(), currentTime, TransactionType.DEPOSIT, from.id, amount
-        )
-        val withdrawTransaction = Transaction(
-            transactionsSequence.incrementAndGet(), currentTime, TransactionType.WITHDRAWAL, to.id, amount
-        )
-        save(to.copy(transactions = to.transactions + depositTransaction))
-        save(from.copy(transactions = from.transactions + withdrawTransaction))
-        return depositTransaction to withdrawTransaction
-    }
-
-    fun balance(source: Account): BigDecimal {
-        return source.transactions.map { it.type.amount(it.amount) }.sumByBigDecimal { it }
-    }
-}
-
-fun CoroutineScope.accountServiceActor(): SendChannel<AccountServiceCommand> = actor {
+fun CoroutineScope.accountServiceActor(store: AccountStorage): SendChannel<AccountServiceCommand> = actor {
     for (command in channel) {
-        when (command) {
-            is CreateNewAccount -> command()
-            is FindAccountById -> command()
-            is CloseAccount -> command()
-            is TransferAmount -> command()
-            is GetAccountBalance -> command()
-        }
+        command(store)
     }
 }
 
-private operator fun CreateNewAccount.invoke() = result.complete(AccountStorage.createNewAccount(initialAmount))
-
-private operator fun FindAccountById.invoke() = AccountStorage.findById(id).let { account ->
-    when (account) {
-        null -> result.completeExceptionally(EntityNotFoundException(id))
-        else -> result.complete(account)
+class CreateNewAccount(private val initialAmount: BigDecimal = ZERO, private val result: CompletableDeferred<Account>) :
+    AccountServiceCommand() {
+    override fun invoke(store: AccountStorage) = result.use {
+        store.createNewAccount(initialAmount)
     }
 }
 
-private operator fun CloseAccount.invoke() = AccountStorage.findById(id).let { account ->
-    when {
-        account == null -> result.completeExceptionally(EntityNotFoundException(id))
-        account.status == AccountStatuses.CLOSED -> result.complete(account)
-        else -> {
-            val balance = AccountStorage.balance(account)
-            when {
-                balance.signum() == 0 -> result.complete(AccountStorage.save(account.copy(status = AccountStatuses.CLOSED)))
-                else -> result.completeExceptionally(InvalidAccountBalance(balance, ZERO))
+class FindAccountById(private val id: Long, private val result: CompletableDeferred<Account>) :
+    AccountServiceCommand() {
+    override fun invoke(store: AccountStorage) = result.use {
+        store.getById(id)
+    }
+}
+
+class CloseAccount(private val id: Long, private val result: CompletableDeferred<Account>) : AccountServiceCommand() {
+    override fun invoke(store: AccountStorage) = result.use {
+        val account = store.getById(id)
+        when {
+            account.status == AccountStatuses.CLOSED -> account
+            else -> {
+                val balance = store.balance(account)
+                when {
+                    balance.signum() == 0 -> store.save(account.copy(status = AccountStatuses.CLOSED))
+                    else -> throw InvalidAccountBalance(balance, ZERO)
+                }
             }
         }
     }
 }
 
-private operator fun GetAccountBalance.invoke() = AccountStorage.findById(id).let { account ->
-    when (account) {
-        null -> result.completeExceptionally(EntityNotFoundException(id))
-        else -> result.complete(AccountStorage.balance(account))
-    }
-}
-
-private operator fun TransferAmount.invoke() {
-    val source = AccountStorage.findById(sourceAccount)
-    val target = AccountStorage.findById(transfer.targetAccount)
-    when {
-        source == null -> {
-            result.completeExceptionally(EntityNotFoundException(sourceAccount))
-        }
-        target == null -> {
-            result.completeExceptionally(EntityNotFoundException(transfer.targetAccount))
-        }
-        else -> {
-            val balance = AccountStorage.balance(source)
-            when {
-                source.status !in Account.VALID_FOR_TRANSFER -> result.completeExceptionally(InvalidAccountStatus(source.status))
-                target.status !in Account.VALID_FOR_TRANSFER -> result.completeExceptionally(InvalidAccountStatus(target.status))
-                balance >= transfer.amount -> result.complete(AccountStorage.transfer(source, target, transfer.amount))
-                else -> result.completeExceptionally(InvalidAccountBalance(balance, transfer.amount))
-            }
+class TransferAmount(
+    private val sourceAccount: Long,
+    private val transfer: TransferRequest,
+    private val result: CompletableDeferred<Pair<Transaction, Transaction>>
+) : AccountServiceCommand() {
+    override fun invoke(store: AccountStorage) = result.use {
+        val source = store.getById(sourceAccount)
+        val target = store.getById(transfer.targetAccount)
+        val balance = store.balance(source)
+        when {
+            !source.validForTransfer() -> throw InvalidAccountStatus(source.status)
+            !target.validForTransfer() -> throw InvalidAccountStatus(target.status)
+            balance >= transfer.amount -> store.transfer(source, target, transfer.amount)
+            else -> throw InvalidAccountBalance(balance, transfer.amount)
         }
     }
 }
 
-class InvalidAccountStatus(val status: AccountStatuses) : RuntimeException()
-class InvalidAccountBalance(val available: BigDecimal, val expected: BigDecimal) : RuntimeException()
+class GetAccountBalance(private val id: Long, private val result: CompletableDeferred<BigDecimal>) :
+    AccountServiceCommand() {
+    override fun invoke(store: AccountStorage) = result.use {
+        val account = store.getById(id)
+        store.balance(account)
+    }
+}
+
+class FindAccounts(
+    private val findRequest: PageRequest,
+    private val result: CompletableDeferred<PageResponse<Account>>
+) :
+    AccountServiceCommand() {
+    override fun invoke(store: AccountStorage) = result.use {
+        val paginator = Paginator(findRequest, store.minIndex)
+
+        val resultList = store
+            .getAll()
+            .filter { it.id > paginator.edgeId }
+            .take(findRequest.limit)
+
+        PageResponse(paginator.nextCursorFor(resultList), resultList)
+    }
+}

@@ -10,6 +10,7 @@ object JsonMapper {
 
     init {
         mapper.configure(SerializationFeature.INDENT_OUTPUT, true)
+        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
         mapper.registerModule(JavaTimeModule())
     }
 }
