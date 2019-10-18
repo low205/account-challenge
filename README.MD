@@ -33,3 +33,12 @@ Using Coroutines, Flows and Channels should allow us to use structured concurren
 ### Deployemnt
 
 Application should be packed as a docker image. 
+
+## Building 
+Application is built with:
+
+     ./gradlew clean build dockerBuildImage
+
+Application could be run then with:
+    
+    docker run -p 8080:8080 challenge/accounting:0.0.1
